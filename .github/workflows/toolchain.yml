@@ -4,6 +4,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 on: [push, pull_request]
 
 jobs:
@@ -25,13 +29,66 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Setup environment
+        run: >
+          printf '%s\n'
+          CCACHE_DIR="$HOME/ccache"
+          SRC_DIR="$HOME/src"
+          | tee -a "${GITHUB_ENV}"
+
+
       - name: Install deps
         run: |
+          set -x
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y bison flex gawk gperf help2man libncurses-dev libtool-bin rsync texinfo
 
+      - name: Restore build cache
+        id: cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: &CACHE_PATHS |
+            ${{ env.CCACHE_DIR }}
+            ${{ env.SRC_DIR }}
+          key: ${{ matrix.tc }}-cache-${{ github.sha }}-${{ github.run_number }}
+          restore-keys: |
+            ${{ matrix.tc }}-cache-${{ github.sha }}-
+            ${{ matrix.tc }}-cache-
+
+      - name: Setup build cache
+        if: steps.build-restore.outputs.cache-hit != 'true'
+        run: |
+          set -x
+          ccache --version
+          ccache --zero-stats
+          ccache --max-size=1G
+          ccache --show-config
+          ccache_bindir='/usr/local/ccache'
+          sudo mkdir "${ccache_bindir}"
+          for f in /usr/bin/{c++,cc,g++,gcc,x86_64-*-gcc,x86_64-*-g++}; do
+            [[ -x "$f" ]] || exit $?
+            sudo ln --symbolic --no-dereference --force --relative /usr/local/bin/ccache "$ccache_bindir/${f##*/}"
+          done
+          printf '%s\n' "${ccache_bindir}" >>"${GITHUB_PATH}"
+          mkdir -p "$SRC_DIR"
+
       - name: Generate toolchain
         run: ./gen-tc.sh ${{ matrix.tc }}
+
+      - name: Clean build cache
+        if: always()
+        run: |
+          set -x
+          ccache --cleanup >/dev/null
+          ccache --show-stats --verbose
+          find "${SRC_DIR}" -type f
+
+      - name: Save build cache
+        uses: actions/cache/save@v6
+        if: always() && steps.cache-restore.outputs.cache-hit != 'true'
+        with:
+          path: *CACHE_PATHS
+          key: ${{ steps.cache-restore.outputs.cache-primary-key }}
 
       - name: Tar artifacts
         run: tar -C ~ -czf ${{ matrix.tc }}.tar.gz x-tools
