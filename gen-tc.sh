@@ -18,7 +18,7 @@
 CUR_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BUILD_ROOT="${CUR_DIR}/build"
 DEFAULT_GIT_REPO='https://github.com/benoit-pierre/crosstool-ng.git'
-DEFAULT_GIT_REV='35fc2b11c3cd44715e67e3e8ff93f2db3b1f0301'
+DEFAULT_GIT_REV='89854bee20ae688ccfa28ac5d28920a9e5750d1b'
 
 Build_CT-NG() {
 	echo "[*] Building CrossTool-NG . . ."
